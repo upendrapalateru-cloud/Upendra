@@ -1,0 +1,126 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {uid}
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required, email format)
+    //   - name: string
+    //   - phone: string
+    //   - role: string (enum: customer, owner, admin)
+    //   - vehicleDetails: string (optional, for owners)
+    //   - createdAt: timestamp
+    //
+    // Collection: orders
+    // Document ID: {orderId}
+    // Fields:
+    //   - id: string
+    //   - customerId: string (required)
+    //   - productName: string (required)
+    //   - productWorth: number
+    //   - offeredPrice: number
+    //   - pickupLocation: string (required)
+    //   - dropLocation: string (required)
+    //   - deliveryDate: timestamp
+    //   - additionalRequirements: string
+    //   - status: string (enum: pending, quoted, accepted, completed)
+    //   - acceptedQuoteId: string
+    //   - acceptedOwnerId: string
+    //   - createdAt: timestamp
+    //
+    // Collection: orders/{orderId}/quotes
+    // Document ID: {quoteId}
+    // Fields:
+    //   - id: string
+    //   - orderId: string (required)
+    //   - ownerId: string (required)
+    //   - ownerName: string
+    //   - quoteValue: number (required)
+    //   - minQuoteValue: number
+    //   - createdAt: timestamp
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "upendrapalateru@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'email', 'name', 'phone', 'role', 'vehicleDetails', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             data.role in ['customer', 'owner', 'admin'];
+    }
+
+    function isValidOrder(data) {
+      return hasOnlyAllowedFields(['id', 'customerId', 'productName', 'productWorth', 'offeredPrice', 'pickupLocation', 'dropLocation', 'deliveryDate', 'additionalRequirements', 'status', 'acceptedQuoteId', 'acceptedOwnerId', 'createdAt']) &&
+             data.customerId == request.auth.uid &&
+             data.status in ['pending', 'quoted', 'accepted', 'completed'];
+    }
+
+    function isValidQuote(data) {
+      return hasOnlyAllowedFields(['id', 'orderId', 'ownerId', 'ownerName', 'quoteValue', 'minQuoteValue', 'createdAt']) &&
+             data.ownerId == request.auth.uid;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (request.resource.data.role != 'admin' || isAdmin());
+      allow update: if isAuthenticated() && (isAdmin() || (isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == resource.data.role));
+    }
+
+    match /orders/{orderId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidOrder(request.resource.data);
+      allow update: if isAuthenticated() && (
+        isAdmin() || 
+        (isOwner(resource.data.customerId) && isValidOrder(request.resource.data)) ||
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner' && (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']) ||
+          (resource.data.acceptedOwnerId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentLocation', 'lastLocationUpdate']))
+        ))
+      );
+      allow delete: if isAdmin();
+
+      match /quotes/{quoteId} {
+        allow read: if isAuthenticated() && (isAdmin() || isOwner(resource.data.ownerId) || isOwner(get(/databases/$(database)/documents/orders/$(orderId)).data.customerId));
+        allow create: if isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner' && isValidQuote(request.resource.data);
+        allow update: if isAuthenticated() && (isAdmin() || (isOwner(resource.data.ownerId) && isValidQuote(request.resource.data)));
+        allow delete: if isAdmin() || isOwner(resource.data.ownerId);
+      }
+    }
+  }
+}

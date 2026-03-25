@@ -1,0 +1,5 @@
+{
+  "name": "LorryLink Logistics",
+  "description": "A real-time logistics and supply platform connecting customers with lorry owners for efficient courier booking.",
+  "requestFramePermissions": ["geolocation"]
+}

@@ -1,0 +1,77 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Application user profile (Customer, Lorry Owner, or Admin)",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "role": { "type": "string", "enum": ["customer", "owner", "admin"] },
+        "vehicleDetails": { "type": "string", "description": "Lorry details (for owners)" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Logistics order created by a customer",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerId": { "type": "string" },
+        "productName": { "type": "string" },
+        "productWorth": { "type": "number" },
+        "offeredPrice": { "type": "number" },
+        "pickupLocation": { "type": "string" },
+        "dropLocation": { "type": "string" },
+        "deliveryDate": { "type": "string", "format": "date-time" },
+        "additionalRequirements": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "quoted", "accepted", "completed"] },
+        "acceptedQuoteId": { "type": "string" },
+        "acceptedOwnerId": { "type": "string" },
+        "currentLocation": { 
+          "type": "object", 
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
+        "lastLocationUpdate": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["customerId", "productName", "pickupLocation", "dropLocation", "status"]
+    },
+    "Quote": {
+      "title": "Quote",
+      "description": "Quote submitted by a lorry owner for an order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderId": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "ownerName": { "type": "string" },
+        "quoteValue": { "type": "number" },
+        "minQuoteValue": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderId", "ownerId", "quoteValue"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Logistics orders"
+    },
+    "/orders/{orderId}/quotes/{quoteId}": {
+      "schema": "Quote",
+      "description": "Quotes for a specific order"
+    }
+  }
+}
